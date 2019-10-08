@@ -96,6 +96,12 @@ int main(int argc, char** argv) {
     int32_t max_genomes;
     get_argument(arguments, "--max_genomes", true, max_genomes);
 
+    int32_t num_genomes_check_on_island;
+    get_argument(arguments, "--num_genomes_check_on_island", false, num_genomes_check_on_island);
+
+    string check_on_island_method = "";
+    get_argument(arguments, "--check_on_island_method", false, check_on_island_method);
+
     int32_t bp_iterations;
     get_argument(arguments, "--bp_iterations", true, bp_iterations);
 
@@ -129,7 +135,7 @@ int main(int argc, char** argv) {
     string rec_sampling_distribution = "uniform";
     get_argument(arguments, "--rec_sampling_distribution", false, rec_sampling_distribution);
 
-    examm = new EXAMM(population_size, number_islands, max_genomes, 
+    examm = new EXAMM(population_size, number_islands, max_genomes, num_genomes_check_on_island, check_on_island_method, 
             time_series_sets->get_input_parameter_names(), 
             time_series_sets->get_output_parameter_names(), 
             time_series_sets->get_normalize_mins(), 
@@ -141,9 +147,10 @@ int main(int argc, char** argv) {
             rec_delay_min, rec_delay_max,
             rec_sampling_population, rec_sampling_distribution,
             output_directory);
-
-    if (possible_node_types.size() > 0) examm->set_possible_node_types(possible_node_types);
-
+  
+    if (possible_node_types.size() > 0)  {
+        examm->set_possible_node_types(possible_node_types);
+    }
 
     vector<thread> threads;
     for (int32_t i = 0; i < number_threads; i++) {

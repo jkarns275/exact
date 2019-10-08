@@ -42,7 +42,7 @@ EXAMM::~EXAMM() {
     }
 }
 
-EXAMM::EXAMM(int32_t _population_size, int32_t _number_islands, int32_t _max_genomes,
+EXAMM::EXAMM(int32_t _population_size, int32_t _number_islands, int32_t _max_genomes, int32_t _num_genomes_check_on_island, string _check_on_island_method,
                 const vector<string> &_input_parameter_names,
                 const vector<string> &_output_parameter_names,
                 const map<string,double> &_normalize_mins,
@@ -85,6 +85,7 @@ int mkpath(const char *path, mode_t mode);
 
     //update to now have islands of genomes
     genomes = vector< vector<RNN_Genome*> >(number_islands);
+    island_states = vector<int32_t>(number_islands, ISLAND_INITIALIZING);
 
     uint16_t seed = std::chrono::system_clock::now().time_since_epoch().count();
     generator = minstd_rand0(seed);
@@ -433,6 +434,10 @@ bool EXAMM::insert_genome(RNN_Genome* genome) {
         genomes[island].insert( upper_bound(genomes[island].begin(), genomes[island].end(), copy, sort_genomes_by_fitness()), copy);
         cout << "finished insert" << endl;
 
+        if (genomes[island].size() >= population_size) {
+            island_states[island] = ISLAND_FILLED;
+        }
+
         //delete the worst individual if we've reached the population size
         if ((int32_t)genomes[island].size() > population_size) {
             cout << "deleting worst genome" << endl;
@@ -453,6 +458,69 @@ bool EXAMM::insert_genome(RNN_Genome* genome) {
     return was_inserted;
 }
 
+int32_t EXAMM::check_on_island() {
+    if (check_on_island_method == "") {
+        return -1;
+    }
+
+    // only run this function every n inserted genomes
+    if (   num_genomes_check_on_island == 0 
+        || inserted_genomes % num_genomes_check_on_island != 0) {
+        return -1;
+    }
+
+    if (check_on_island_method == "clear_island_with_worst_best_genome") {
+        return clear_island_with_worst_best_genome();
+    }
+    
+    return -1;
+}
+
+int32_t EXAMM::clear_island_with_worst_best_genome() {
+    int32_t worst_island = -1;
+    double worst_island_fitness = -EXAMM_MAX_DOUBLE;
+
+    // find the best genome for each island and identify the 
+    //island with the worst best genome
+    for (int32_t i = 0; i < (int32_t)genomes.size(); i++) {
+        double best_fitness = EXAMM_MAX_DOUBLE;
+
+        for (int32_t j = 0; j < (int32_t)genomes[i].size(); j++) {
+            if (genomes[i][j]->get_fitness() < best_fitness) {
+                best_fitness = genomes[i][j]->get_fitness();
+            }
+        }
+
+        if (best_fitness > worst_island_fitness) {
+            worst_island = i;
+            worst_island_fitness = best_fitness;
+        }
+    }
+
+    // clear the genomes from the identified island
+    if (worst_island != -1) {
+        cout << "check_on_island: clearing genomes from a bad island: " << worst_island << endl;
+        /*
+        for (int32_t i = 0; i < (int32_t)genomes[worst_island].size(); i++) {
+            if (genomes[worst_island][i] != NULL) {
+                delete genomes[worst_island][i];
+                genomes[worst_island].erase(genomes[worst_island].begin() + i);
+            }
+        }
+        */
+
+        while (genomes[worst_island].size() > 0) {
+            RNN_Genome *genome = genomes[worst_island][0];
+            genomes[worst_island].erase(genomes[worst_island].begin());
+            delete genome;
+        }
+
+        island_states[worst_island] = ISLAND_REPOPULATING;
+    }
+
+    return worst_island;
+}
+
 void EXAMM::initialize_genome_parameters(RNN_Genome* genome) {
     genome->set_bp_iterations(bp_iterations);
     genome->set_learning_rate(learning_rate);
@@ -464,40 +532,85 @@ void EXAMM::initialize_genome_parameters(RNN_Genome* genome) {
 
 RNN_Genome* EXAMM::generate_genome() {
     if (inserted_genomes > max_genomes) return NULL;
-    int island = generated_genomes % number_islands;
+
+    //check_on_island returns -1 if no island was killed, or the island number otherwise
+    int32_t revisit_island = check_on_island();
+    
+    //generate a new genome for te killed island if one exists, otherwise just generate from
+    //an island in a round robin manner
+    //int32_t island = revisit_island != -1 ? revisit_island : generated_genomes % number_islands;
+
+    int32_t island = generated_genomes % number_islands;
+
     generated_genomes++;
 
     RNN_Genome *genome = NULL;
 
-    if (genomes[island].size() == 0) {
-        //this is the first genome to be generated
-        //generate minimal genome, insert it into the population
-        genome = create_ff(number_inputs, 0, 0, number_outputs, 0);
-        genome->set_island(island);
-        genome->set_parameter_names(input_parameter_names, output_parameter_names);
-        genome->set_normalize_bounds(normalize_mins, normalize_maxs);
+    if (island_states[island] == ISLAND_INITIALIZING) {
 
-        edge_innovation_count = genome->edges.size() + genome->recurrent_edges.size();
-        node_innovation_count = genome->nodes.size();
+        if (genomes[island].size() == 0) {
+            //this is the first genome to be generated
+            //generate minimal genome, insert it into the population
+            genome = create_ff(number_inputs, 0, 0, number_outputs, 0);
+            genome->set_island(island);
+            genome->set_parameter_names(input_parameter_names, output_parameter_names);
+            genome->set_normalize_bounds(normalize_mins, normalize_maxs);
 
-        genome->set_generated_by("initial");
-        initialize_genome_parameters(genome);
+            edge_innovation_count = genome->edges.size() + genome->recurrent_edges.size();
+            node_innovation_count = genome->nodes.size();
 
-        //insert a copy of it into the population so
-        //additional requests can mutate it
-        genome->initialize_randomly();
-        double _mu, _sigma;
-        cout << "getting mu/sigma after random initialization!" << endl;
-        genome->get_mu_sigma(genome->best_parameters, _mu, _sigma);
+            genome->set_generated_by("initial");
+            initialize_genome_parameters(genome);
 
-        genome->best_validation_mse = EXAMM_MAX_DOUBLE;
-        genome->best_validation_mae = EXAMM_MAX_DOUBLE;
-        genome->best_parameters.clear();
-        //genome->clear_generated_by();
+            //insert a copy of it into the population so
+            //additional requests can mutate it
+            genome->initialize_randomly();
+            double _mu, _sigma;
+            cout << "getting mu/sigma after random initialization!" << endl;
+            genome->get_mu_sigma(genome->best_parameters, _mu, _sigma);
 
-        insert_genome(genome->copy());
+            genome->best_validation_mse = EXAMM_MAX_DOUBLE;
+            genome->best_validation_mae = EXAMM_MAX_DOUBLE;
+            genome->best_parameters.clear();
+            //genome->clear_generated_by();
 
-    } else {
+            insert_genome(genome->copy());
+        } else {
+            while (genome == NULL) {
+                int32_t genome_position = genomes[island].size() * rng_0_1(generator);
+                genome = genomes[island][genome_position]->copy();
+                mutate(genome);
+
+                genome->set_normalize_bounds(normalize_mins, normalize_maxs);
+                genome->set_island(island);
+
+                if (genome->outputs_unreachable()) {
+                    //no path from at least one input to the outputs
+                    delete genome;
+                    genome = NULL;
+                }
+            }
+
+            //the population hasn't been filled yet, so insert a copy of
+            //the genome into the population so it can be further mutated
+            RNN_Genome *copy = genome->copy();
+            copy->initialize_randomly();
+            double _mu, _sigma;
+            cout << "getting mu/sigma after random initialization of copy!" << endl;
+            genome->get_mu_sigma(genome->best_parameters, _mu, _sigma);
+
+            insert_genome(copy);
+
+            //also randomly initialize this genome as
+            //what it was generated from was also randomly
+            //initialized as the population hasn't been
+            //filled
+            genome->initialize_randomly();
+            cout << "getting mu/sigma after random initialization due to genomes.size() < population_size!" << endl;
+            genome->get_mu_sigma(genome->best_parameters, _mu, _sigma);
+        }
+
+    } else if (island_states[island] == ISLAND_FILLED) {
         //generate a genome via crossover or mutation
 
         cout << "generating new genome, genomes[" << island << "].size(): " << genomes[island].size() << ", population_size: " << population_size << ", crossover_rate: " << crossover_rate << endl;
@@ -576,25 +689,17 @@ RNN_Genome* EXAMM::generate_genome() {
             }
         }
 
-        //if the population hasn't been filled yet, insert a copy of
-        //the genome into the population so it can be further mutated
-        if (genomes[island].size() < population_size) {
-            RNN_Genome *copy = genome->copy();
-            copy->initialize_randomly();
-            double _mu, _sigma;
-            cout << "getting mu/sigma after random initialization of copy!" << endl;
-            genome->get_mu_sigma(genome->best_parameters, _mu, _sigma);
+    } else if (island_states[island] == ISLAND_REPOPULATING) {
+        //here's where you put your repopulation code
+        //select two other islands (non-overlapping) at random, and select genomes
+        //from within those islands and generate a child via crossover
 
-            insert_genome(copy);
+        //note: don't kill an island if you still are repopulating an island
 
-            //also randomly initialize this genome as
-            //what it was generated from was also randomly
-            //initialized as the population hasn't been
-            //filled
-            genome->initialize_randomly();
-            cout << "getting mu/sigma after random initialization due to genomes.size() < population_size!" << endl;
-            genome->get_mu_sigma(genome->best_parameters, _mu, _sigma);
-        }
+    } else {
+        cerr << "ERROR: unknown island state (" << island_states[island] << ")" << endl;
+        cerr << "This should never happen!" << endl;
+        exit(1);
     }
 
     //genome->write_graphviz(output_directory + "/rnn_genome_" + to_string(generated_genomes) + ".gv");

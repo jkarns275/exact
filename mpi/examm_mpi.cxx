@@ -251,6 +251,12 @@ int main(int argc, char** argv) {
     int32_t max_genomes;
     get_argument(arguments, "--max_genomes", true, max_genomes);
 
+    int32_t num_genomes_check_on_island;
+    get_argument(arguments, "--num_genomes_check_on_island", false, num_genomes_check_on_island);
+
+    string check_on_island_method = "";
+    get_argument(arguments, "--check_on_island_method", false, check_on_island_method);
+
     int32_t bp_iterations;
     get_argument(arguments, "--bp_iterations", true, bp_iterations);
 
@@ -285,7 +291,7 @@ int main(int argc, char** argv) {
     get_argument(arguments, "--rec_sampling_distribution", false, rec_sampling_distribution);
 
     if (rank == 0) {
-        examm = new EXAMM(population_size, number_islands, max_genomes,
+        examm = new EXAMM(population_size, number_islands, max_genomes, num_genomes_check_on_island, check_on_island_method,
             time_series_sets->get_input_parameter_names(), 
             time_series_sets->get_output_parameter_names(),
             time_series_sets->get_normalize_mins(), 

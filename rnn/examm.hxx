@@ -19,6 +19,9 @@ using std::vector;
 
 #include "rnn_genome.hxx"
 
+#define ISLAND_INITIALIZING 0
+#define ISLAND_FILLED 1
+#define ISLAND_REPOPULATING 2
 #define GLOBAL_POPULATION 0
 #define ISLAND_POPULATION 1
 
@@ -30,12 +33,17 @@ class EXAMM {
     private:
         int32_t population_size;
         int32_t number_islands;
+
+        vector<int32_t> island_states;
         vector< vector<RNN_Genome*> > genomes;
 
         int32_t max_genomes;
         int32_t generated_genomes;
         int32_t inserted_genomes;
         int32_t total_bp_epochs;
+
+        int32_t num_genomes_check_on_island;
+        string check_on_island_method;
 
         int32_t edge_innovation_count;
         int32_t node_innovation_count;
@@ -88,6 +96,7 @@ class EXAMM {
 
         vector<int> possible_node_types;
 
+
         string output_directory;
         ofstream *log_file;
 
@@ -105,7 +114,7 @@ class EXAMM {
         int32_t rec_sampling_distribution;
 
     public:
-        EXAMM(int32_t _population_size, int32_t _number_islands, int32_t _max_genomes, 
+        EXAMM(int32_t _population_size, int32_t _number_islands, int32_t _max_genomes, int32_t _num_genomes_check_on_island, string _check_on_island_method,
             const vector<string> &_input_parameter_names,
             const vector<string> &_output_parameter_names, 
             const map<string,double> &_normalize_mins,
@@ -132,6 +141,10 @@ class EXAMM {
         Distribution *get_recurrent_depth_dist(int32_t island);
 
         int get_random_node_type();
+
+        int32_t check_on_island();
+        // methods
+        int32_t clear_island_with_worst_best_genome();
 
         void initialize_genome_parameters(RNN_Genome* genome);
         RNN_Genome* generate_genome();
