@@ -1704,7 +1704,9 @@ bool RNN_Genome::add_recurrent_edge(double mu, double sigma, Distribution* dist,
     //no need to swap the nodes as recurrent connections can go backwards
 
     // int32_t recurrent_depth = 1 + (rng_0_1(generator) * (max_recurrent_depth - 1));
-    int32_t recurrent_depth = dist->sample();
+    int32_t recurrent_depth = dist->sample(); 
+    this->new_rec_depth = std::optional<int32_t>(recurrent_depth);
+
     //check to see if an edge between the two nodes already exists
     for (int32_t i = 0; i < (int32_t)recurrent_edges.size(); i++) {
         if (recurrent_edges[i]->input_innovation_number == n1->innovation_number &&

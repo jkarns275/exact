@@ -75,8 +75,13 @@ class RNN_Genome {
 
         map<string,double> normalize_mins;
         map<string,double> normalize_maxs;
-
+        
     public:
+        // when a recursive depth mutation is applied store it.
+        // if it is beneficial and we're using pheromone distribution then we will
+        // reinforce this depth
+        std::optional<int32_t> new_rec_depth;
+
         void sort_nodes_by_depth();
         void sort_edges_by_depth();
 

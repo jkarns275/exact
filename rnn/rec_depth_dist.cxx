@@ -144,3 +144,43 @@ int32_t RecDepthUniformDist::sample() {
     int32_t rand_int = rng() & 0x7FFFFFFF; 
     return min + (rand_int % (max - min));
 }
+
+RecDepthPheromoneDist::RecDepthPheromoneDist(int32_t _min, int32_t _max, 
+        double _decay_rate, double _baseline_pheromone) : Distribution() {
+    min = _min; max = _max; decay_rate = _decay_rate; baseline_pheromone = _baseline_pheromone;
+    dist = vector(max + 1, 0.0);
+}
+
+int32_t RecDepthPheromoneDist::sample() {
+    // Calculate the sum of pheromones
+    double sum = 0.0;
+    for (int32_t i = min; i <= max; i += 1) {
+        sum += dist[i] + baseline_pheromone;
+    }
+    
+    // random number between 0 and sum of pheromones
+    std::uniform_real_distribution<double> uniform(0.0, sum);
+    double r = uniform(rng);
+    
+    // Sample the distribution with r
+    sum = 0.0;
+    for (int32_t i = min; i <= max; i += 1) {
+        sum += dist[i] + baseline_pheromone;
+        if (r < sum)
+            return i;
+    }
+    return max;
+}
+
+void RecDepthPheromoneDist::decay() {
+    for (int32_t i = min; i <= max; i += 1)
+        dist[i] *= decay_rate;
+}
+
+void RecDepthPheromoneDist::deposit(int32_t ix) {
+    for (int32_t i = min; i <= max; i += 1) {
+        int32_t power = abs(i - ix);
+        double d = pow(2.0, power);
+        dist[i] += 1.0 / d;
+    }
+}

@@ -118,11 +118,16 @@ int main(int argc, char** argv) {
     string rec_sampling_distribution = "uniform";
     get_argument(arguments, "--rec_sampling_distribution", false, rec_sampling_distribution);
 
+    double decay_rate = 0;
+    get_argument(arguments, "--rec_depth_pheromone_decay_rate", false, decay_rate);
+
+    double baseline_pheromone = 0;
+    get_argument(arguments, "--rec_depth_pheromone_baseline", false, baseline_pheromone);
+
     get_argument(arguments, "--output_directory", true, output_directory);
 
     string output_filename;
     get_argument(arguments, "--output_filename", true, output_filename);
-
 
     TimeSeriesSets *time_series_sets = TimeSeriesSets::generate_from_arguments(arguments);
 
@@ -169,6 +174,7 @@ int main(int argc, char** argv) {
                 use_low_threshold, low_threshold,
                 use_dropout, dropout_probability,
                 rec_delay_min, rec_delay_max,
+                decay_rate, baseline_pheromone,
                 rec_sampling_population, rec_sampling_distribution,
                 output_directory + "/slice_" + to_string(i) + "_repeat_" + to_string(k));
 

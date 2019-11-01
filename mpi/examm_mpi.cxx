@@ -290,6 +290,12 @@ int main(int argc, char** argv) {
     string rec_sampling_distribution = "uniform";
     get_argument(arguments, "--rec_sampling_distribution", false, rec_sampling_distribution);
 
+    double decay_rate = 0;
+    get_argument(arguments, "--rec_depth_pheromone_decay_rate", false, decay_rate);
+
+    double baseline_pheromone = 0;
+    get_argument(arguments, "--rec_depth_pheromone_baseline", false, baseline_pheromone);
+
     if (rank == 0) {
         examm = new EXAMM(population_size, number_islands, max_genomes, num_genomes_check_on_island, check_on_island_method,
             time_series_sets->get_input_parameter_names(), 
@@ -301,6 +307,7 @@ int main(int argc, char** argv) {
             use_low_threshold, low_threshold,
             use_dropout, dropout_probability,
             rec_delay_min, rec_delay_max,
+            decay_rate, baseline_pheromone,
             rec_sampling_population, rec_sampling_distribution,
             output_directory);
 

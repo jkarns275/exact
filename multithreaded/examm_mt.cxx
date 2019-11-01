@@ -26,7 +26,7 @@ using std::vector;
 #include "common/arguments.hxx"
 
 #include "rnn/examm.hxx"
-
+#include "rnn/rec_depth_dist.hxx"
 #include "time_series/time_series.hxx"
 
 
@@ -52,6 +52,8 @@ void examm_thread(int id) {
         examm_mutex.lock();
         RNN_Genome *genome = examm->generate_genome();
         examm_mutex.unlock();
+        
+        double prev_fitness = genome->get_fitness();
 
         if (genome == NULL) break;  //generate_individual returns NULL when the search is done
 
@@ -59,7 +61,16 @@ void examm_thread(int id) {
         genome->backpropagate_stochastic(training_inputs, training_outputs, validation_inputs, validation_outputs);
 
         examm_mutex.lock();
+        
+        if (prev_fitness > genome->get_fitness() && genome->new_rec_depth.has_value()) {
+            int32_t depth = genome->new_rec_depth.value();
+            if (examm->rec_sampling_population == ISLAND_POPULATION)
+                examm->rec_sampling_pheromone_dists[genome->get_island()].deposit(depth);
+            else
+                examm->rec_sampling_pheromone_dists[0].deposit(depth);
+        }
         examm->insert_genome(genome);
+        
         examm_mutex.unlock();
 
         delete genome;
@@ -135,6 +146,12 @@ int main(int argc, char** argv) {
     string rec_sampling_distribution = "uniform";
     get_argument(arguments, "--rec_sampling_distribution", false, rec_sampling_distribution);
 
+    double decay_rate = 0;
+    get_argument(arguments, "--rec_depth_pheromone_decay_rate", false, decay_rate);
+
+    double baseline_pheromone = 0;
+    get_argument(arguments, "--rec_depth_pheromone_baseline", false, baseline_pheromone);
+    
     examm = new EXAMM(population_size, number_islands, max_genomes, num_genomes_check_on_island, check_on_island_method, 
             time_series_sets->get_input_parameter_names(), 
             time_series_sets->get_output_parameter_names(), 
@@ -145,6 +162,7 @@ int main(int argc, char** argv) {
             use_low_threshold, low_threshold, 
             use_dropout, dropout_probability, 
             rec_delay_min, rec_delay_max,
+            decay_rate, baseline_pheromone,
             rec_sampling_population, rec_sampling_distribution,
             output_directory);
   

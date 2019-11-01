@@ -75,4 +75,17 @@ class RecDepthUniformDist : public Distribution {
         int32_t sample() override;
 };
 
+class RecDepthPheromoneDist : public Distribution {
+    private:
+        int32_t min, max;
+        vector<double> dist;
+        double decay_rate, baseline_pheromone;
+    public:
+        RecDepthPheromoneDist(int32_t min, int32_t max, double decay_rate, double baseline_pheromone);
+        ~RecDepthPheromoneDist() {}
+        int32_t sample() override;
+        void decay();
+        void deposit(int32_t i);
+};
+
 #endif

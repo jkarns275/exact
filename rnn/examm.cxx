@@ -52,6 +52,7 @@ EXAMM::EXAMM(int32_t _population_size, int32_t _number_islands, int32_t _max_gen
                 bool _use_low_threshold, double _low_threshold, 
                 bool _use_dropout, double _dropout_probability,
                 int32_t _min_recurrent_depth, int32_t _max_recurrent_depth,
+                double decay_rate, double baseline_pheromone,
                 string _rec_sampling_population, string _rec_sampling_distribution, string _output_directory) : 
                                         population_size(_population_size), 
                                         number_islands(_number_islands), 
@@ -98,7 +99,6 @@ int mkpath(const char *path, mode_t mode);
 
     min_recurrent_depth = _min_recurrent_depth;
     max_recurrent_depth = _max_recurrent_depth;
-
     
     if (_rec_sampling_population.compare("global") == 0) {
         rec_sampling_population = GLOBAL_POPULATION;
@@ -111,14 +111,21 @@ int mkpath(const char *path, mode_t mode);
         rec_sampling_population = GLOBAL_POPULATION;
     }
 
-    if (_rec_sampling_distribution.compare("global") == 0) {
+    auto ndists = rec_sampling_population == GLOBAL_POPULATION ? 1 : number_islands;    
+    
+    if (_rec_sampling_distribution.compare("normal") == 0) {
         rec_sampling_population = NORMAL_DISTRIBUTION;
     } else if (_rec_sampling_distribution.compare("histogram") == 0) {
         rec_sampling_population = HISTOGRAM_DISTRIBUTION;
     } else if (_rec_sampling_distribution.compare("uniform") == 0) {
         rec_sampling_population = UNIFORM_DISTRIBUTION;
-    }
-    else {
+    } else if (_rec_sampling_distribution.compare("pheromone") == 0) {
+        rec_sampling_pheromone_dists = vector<RecDepthPheromoneDist>();
+        for (int32_t i = 0; i < ndists; i += 1)
+            rec_sampling_pheromone_dists.push_back(
+                RecDepthPheromoneDist(  min_recurrent_depth, max_recurrent_depth, 
+                                        decay_rate, baseline_pheromone));
+    } else {
         cout << "WARNING: value passed to --rec_sampling_distribution is not valid ('" 
              << _rec_sampling_distribution
              << "'), defaulting to uniform.\n";
@@ -140,8 +147,8 @@ int mkpath(const char *path, mode_t mode);
     clone_rate = 1.0;
 
     add_edge_rate = 1.0;
-    //add_recurrent_edge_rate = 3.0;
-    add_recurrent_edge_rate = 1.0;
+    add_recurrent_edge_rate = 3.0;
+    //add_recurrent_edge_rate = 1.0;
     enable_edge_rate = 1.0;
     //disable_edge_rate = 3.0;
     disable_edge_rate = 1.0;
@@ -229,10 +236,9 @@ void EXAMM::print_population() {
             << "," << best_genome->best_validation_mse
             << "," << best_genome->get_enabled_node_count()
             << "," << best_genome->get_enabled_edge_count()
-            << "," << best_genome->get_enabled_recurrent_edge_count();
-        
-        /* // Commented out to prevent unecessary data collection - 
-         * // stores the frequency table of rec connection depth for each island
+            << "," << best_genome->get_enabled_recurrent_edge_count()
+         // Commented out to prevent unecessary data collection - 
+         // stores the frequency table of rec connection depth for each island
             << ",";
         for (int32_t i = 0; i < genomes.size(); i += 1) {
             RecDepthFrequencyTable freqs(genomes[i], min_recurrent_depth, max_recurrent_depth);
@@ -243,7 +249,7 @@ void EXAMM::print_population() {
             }
             if (i != genomes.size()) 
                 (*log_file) << "$";
-        }*/
+        }
 
         (*log_file) << endl;
         
@@ -723,11 +729,16 @@ Distribution *EXAMM::get_recurrent_depth_dist(int32_t island_index) {
                 d = new RecDepthNormalDist(genomes[island_index], min_recurrent_depth, max_recurrent_depth);
             else
                 d = new RecDepthNormalDist(genomes, min_recurrent_depth, max_recurrent_depth);
-        } else {
+        } else if (rec_sampling_distribution == HISTOGRAM_DISTRIBUTION) {
             if (rec_sampling_population == ISLAND_POPULATION)
                 d = new RecDepthHistDist(genomes[island_index], min_recurrent_depth, max_recurrent_depth);
             else
                 d = new RecDepthHistDist(genomes, min_recurrent_depth, max_recurrent_depth);
+        } else { // Must be pheromone dist
+            if (rec_sampling_distribution == ISLAND_POPULATION)
+                d = &rec_sampling_pheromone_dists[island_index];
+            else
+                d = &rec_sampling_pheromone_dists[0];
         }
     } else {
         d = new RecDepthUniformDist(min_recurrent_depth, max_recurrent_depth);
@@ -747,6 +758,8 @@ void EXAMM::mutate(RNN_Genome *g) {
     cout << "generating new genome by mutation" << endl;
     g->get_mu_sigma(g->best_parameters, mu, sigma);
     g->clear_generated_by();
+
+    g->new_rec_depth = std::nullopt;
 
     //the the weights in the genome to it's best parameters
     //for epigenetic iniitalization
@@ -784,7 +797,17 @@ void EXAMM::mutate(RNN_Genome *g) {
         if (rng < add_recurrent_edge_rate) {
             Distribution *dist = get_recurrent_depth_dist(g->island);
             modified = g->add_recurrent_edge(mu, sigma, dist, edge_innovation_count);
-            delete dist;
+
+            // Only delete if it is not a pheromone dist,
+            // because the pheromone dist has some state information that must remain
+            // across iterations
+            if (rec_sampling_distribution != PHEROMONE_DISTRIBUTION) {
+                delete dist;
+            } else {
+                RecDepthPheromoneDist* d = (RecDepthPheromoneDist *) dist;
+                d->decay();
+            }
+
             cout << "\tadding recurrent edge, modified: " << modified << endl;
             if (modified) g->set_generated_by("add_recurrent_edge");
             continue;

@@ -22,12 +22,17 @@ using std::vector;
 #define ISLAND_INITIALIZING 0
 #define ISLAND_FILLED 1
 #define ISLAND_REPOPULATING 2
+
 #define GLOBAL_POPULATION 0
 #define ISLAND_POPULATION 1
 
 #define UNIFORM_DISTRIBUTION 0
 #define HISTOGRAM_DISTRIBUTION 1
 #define NORMAL_DISTRIBUTION 2
+#define PHEROMONE_DISTRIBUTION 3
+
+// Forward declare this
+class RecDepthPheromoneDist;
 
 class EXAMM {
     private:
@@ -96,7 +101,6 @@ class EXAMM {
 
         vector<int> possible_node_types;
 
-
         string output_directory;
         ofstream *log_file;
 
@@ -110,10 +114,13 @@ class EXAMM {
 
         std::chrono::time_point<std::chrono::system_clock> startClock;
     
+    public:
         int32_t rec_sampling_population;
         int32_t rec_sampling_distribution;
+        // If using global pop there will only be 1 in here, otherwise
+        // size will be equal to the number of islands.
+        vector<RecDepthPheromoneDist> rec_sampling_pheromone_dists;
 
-    public:
         EXAMM(int32_t _population_size, int32_t _number_islands, int32_t _max_genomes, int32_t _num_genomes_check_on_island, string _check_on_island_method,
             const vector<string> &_input_parameter_names,
             const vector<string> &_output_parameter_names, 
@@ -124,6 +131,7 @@ class EXAMM {
             bool _use_low_threshold, double _low_threshold, 
             bool _use_dropout, double _dropout_probability,
             int32_t _min_recurrent_depth, int32_t _max_recurrent_depth,
+            double decay_rate, double baseline_pheromone,
             string _rec_sampling_population, string _rec_sampling_distribution, string _output_directory);
 
         ~EXAMM();
